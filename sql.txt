@@ -1,0 +1,61 @@
+Create column table Articles4
+(
+Title nvarchar(300) PRIMARY KEY,
+url nvarchar(300),
+date_published nvarchar(50),
+article_content blob,
+comments blob
+);
+
+--индекс по колоната comments 
+CREATE FULLTEXT INDEX comm_index on "DEV_1TC7TGFJEAJYC5E15Y05JH64O"."ARTICLES4" ("COMMENTS")
+CONFIGURATION 'EXTRACTION_CORE_VOICEOFCUSTOMER'
+text analysis on;
+
+--показване на резултатите от анализа
+SELECT "TA_TYPE", ROUND("SENTIMENT_VALUE"/ "TOTAL_SENTIMENT_VALAUE" * 100,2) AS "SENTIMENT_VALAUE_PERCENTAGE",title,date_p
+FROM 
+( 
+SELECT "TA_TYPE", SUM("TA_COUNTER") AS "SENTIMENT_VALUE",a.title as title,a.date_published as date_p
+     FROM "DEV_1TC7TGFJEAJYC5E15Y05JH64O"."$TA_COMM_INDEX" com ,ARTICLES4 a 
+    where TA_TYPE in('WeakPositiveSentiment','StrongPositiveSentiment','NeutralSentiment',
+       'WeakNegativeSentiment','StrongNegativeSentiment','MajorProblem','MinorProblem') and com.title=a.title
+    GROUP BY "TA_TYPE",a.title,a.date_published
+) AS TABLE1,
+
+(
+SELECT SUM("TA_COUNTER") AS "TOTAL_SENTIMENT_VALAUE" 
+    FROM "DEV_1TC7TGFJEAJYC5E15Y05JH64O"."$TA_COMM_INDEX" com,ARTICLES4 a 
+    where TA_TYPE in('WeakPositiveSentiment','StrongPositiveSentiment','NeutralSentiment',
+       'WeakNegativeSentiment','StrongNegativeSentiment','MajorProblem','MinorProblem') and com.title=a.title
+) AS TABLE2
+
+--процедура,ко€то се грижи да н€ма дублираща се информаци€ в базата(за коментарите).
+--ѕри опит за вкарване на дублираща информаци€ се презаписват коментарите
+
+CREATE PROCEDURE "DEV_1TC7TGFJEAJYC5E15Y05JH64O"."article_ins_update"(
+  IN Title nvarchar(300),
+  IN url nvarchar(300),
+  IN date_published nvarchar(50),
+  IN article_content blob,
+  IN comments blob)
+   LANGUAGE SQLSCRIPT
+    SQL SECURITY INVOKER
+AS
+
+BEGIN
+    DECLARE found INT := 1;
+    SELECT count(*) INTO found FROM "DEV_1TC7TGFJEAJYC5E15Y05JH64O"."ARTICLES4" 
+        WHERE Title = :Title;
+   
+    IF :found = 0
+    THEN
+        INSERT INTO "DEV_1TC7TGFJEAJYC5E15Y05JH64O"."ARTICLES4" 
+            VALUES (:Title, :url, :date_published,:article_content,:comments);
+    ELSE
+        UPDATE "DEV_1TC7TGFJEAJYC5E15Y05JH64O"."ARTICLES4"
+            SET url = :url, date_published = :date_published,comments = :comments
+            WHERE Title = :Title;
+    END IF;
+    SELECT Title,date_published FROM "DEV_1TC7TGFJEAJYC5E15Y05JH64O"."ARTICLES4" ;
+END; 
